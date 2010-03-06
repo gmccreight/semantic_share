@@ -140,7 +140,7 @@ function outputNode(node) {
 
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en">
   <head>
-    <title>semantic share</title>
+    <title>semantic text</title>
     <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1" />
     <link rel="stylesheet" href="./static/style.css" type="text/css" />
     
@@ -200,7 +200,7 @@ function outputNode(node) {
 
   <body onload="do_onload()">
     <form action="/update" method="post">
-        <input name="page_name" type="hidden" value=\"""" + page.name + """">
+        <input name="page_name" type="hidden" value=\"""" + page.name + """" />
         <table>
           <tr><td>
           <textarea id="ta_data" name="page_text_content" rows="20" cols="20" onkeyup="textarea_changed()" onfocus="focused(this)">""" + page.text_content + """</textarea></td>
@@ -210,7 +210,7 @@ function outputNode(node) {
           <td><textarea id="ta_calculated_json" name="page_calculated_json_content" rows="20" cols="20" onkeyup="textarea_changed()" onfocus="focused(this)"></textarea></td>
           </tr>
         </table>
-        <input type="submit" name="submit" value="save">""" + page_previous_version_link + """
+        <input type="submit" name="submit" value="save" />""" + page_previous_version_link + """
     </form>
     """ + page_edit_link + """
     <div id="warning"></div>
