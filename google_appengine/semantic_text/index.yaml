@@ -10,3 +10,8 @@ indexes:
 # automatically uploaded to the admin console when you next deploy
 # your application using appcfg.py.
 
+- kind: Page
+  properties:
+  - name: name
+  - name: date
+    direction: desc
