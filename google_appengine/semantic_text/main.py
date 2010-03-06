@@ -30,6 +30,7 @@ class Page(db.Model):
     name = db.StringProperty(multiline=False)
     text_content = db.TextProperty()
     js_content = db.TextProperty()
+    calculated_json_content = db.TextProperty()
     version = db.IntegerProperty()
     date = db.DateTimeProperty(auto_now_add=True)
 
@@ -107,12 +108,12 @@ function checkNodeId(node) {
 
 data = JSON.stringify(nodes);
 
-// Log the node data structure in a formatted way
-nodes.forEach(logNode);
-function logNode(node) {
-    log(Array(node.indent_amount + 1 ).join("&nbsp;") + node.name
+// Output the node data structure in a formatted way
+nodes.forEach(outputNode);
+function outputNode(node) {
+    append_to_output(Array(node.indent_amount + 1 ).join("&nbsp;") + node.name
     + " <i>" + node.description + "</i>");
-    node.children.forEach(logNode);
+    node.children.forEach(outputNode);
 }
 /* ]]> */"""
 
@@ -121,9 +122,16 @@ function logNode(node) {
         page_js_content = cgi.escape(page.js_content)
         page_version = cgi.escape(str(page.version))
 
+
+        page_edit_css = "form { display:none }\n"
+        page_edit_link = "<a class=\"edit_link\" href=\"/?page_name=" + page.name + "&edit=1\">edit</a><br>"
+        if self.request.get('edit'):
+            page_edit_css = ""
+            page_edit_link = ""
+
         page_previous_version_link = ""
         if page.version > 0:
-            page_previous_version_link = '<a href="/?page_name=' + page.name + '_version_%s">back one version</a>' % str(page.version - 1)
+            page_previous_version_link = ' <a href="/?page_name=' + page.name + '_version_%s">back one version</a>' % str(page.version - 1)
 
 
         self.response.out.write("""
@@ -148,11 +156,11 @@ function logNode(node) {
       }
       function do_parsing () {
         clear_warning();
-        clear_log();
+        clear_formatted_output();
         var data = $('ta_data').value;
         parser_js = $('ta_parser_js').value;
         eval(parser_js);
-        $('ta_output').value = data;
+        $('ta_calculated_json').value = data;
       }
       function textarea_changed () {
         do_parsing();
@@ -163,15 +171,15 @@ function logNode(node) {
       function clear_warning () {
         $('warning').innerHTML = '';
       }
-      function log (message) {
-        $('log').innerHTML = $('log').innerHTML + message + "<br>";
+      function append_to_output (message) {
+        $('formatted_output').innerHTML = $('formatted_output').innerHTML + message + "<br>";
       }
-      function clear_log () {
-        $('log').innerHTML = '';
+      function clear_formatted_output () {
+        $('formatted_output').innerHTML = '';
       }
       function focused(element) {
         // Resize the textareas to have the most size on the one you're working on
-        ['ta_data', 'ta_parser_js', 'ta_output'].forEach(
+        ['ta_data', 'ta_parser_js', 'ta_calculated_json'].forEach(
           function (element_id) {
             $(element_id).style.width = '300px';
           }
@@ -183,30 +191,30 @@ function logNode(node) {
     <style type="text/css">
       body { margin-left:10px; }
       textarea { width:420px; height:500px; }
+      a.edit_link { font-size:12px; }
       #warning { color:red; font-size:24px; }
-      #log { color:green; font-size:12px; }
+      #formatted_output { color:black; font-size:12px; }
+      """ + page_edit_css + """
     </style>
   </head>
 
   <body onload="do_onload()">
     <form action="/update" method="post">
-    <input name="page_name" type="hidden" value=\"""" + page.name + """">
-    <table>
-      <tr><td>
-      <textarea id="ta_data" name="page_text_content" rows="20" cols="20" onkeyup="textarea_changed()" onfocus="focused(this)">""" + page.text_content + """
-</textarea></td>
-    
-      <td><textarea id="ta_parser_js" name="page_js_content" rows="20" cols="20" onkeyup="textarea_changed()" onfocus="focused(this)">""" + page.js_content + """
-      </textarea></td>
-      
-      <td><textarea id="ta_output" rows="20" cols="20" onkeyup="textarea_changed()" onfocus="focused(this)">
-      </textarea></td>
-      </tr>
-    </table>
-    <input type="submit" name="submit" value="save">""" + page_previous_version_link + """
+        <input name="page_name" type="hidden" value=\"""" + page.name + """">
+        <table>
+          <tr><td>
+          <textarea id="ta_data" name="page_text_content" rows="20" cols="20" onkeyup="textarea_changed()" onfocus="focused(this)">""" + page.text_content + """</textarea></td>
+        
+          <td><textarea id="ta_parser_js" name="page_js_content" rows="20" cols="20" onkeyup="textarea_changed()" onfocus="focused(this)">""" + page.js_content + """</textarea></td>
+          
+          <td><textarea id="ta_calculated_json" name="page_calculated_json_content" rows="20" cols="20" onkeyup="textarea_changed()" onfocus="focused(this)"></textarea></td>
+          </tr>
+        </table>
+        <input type="submit" name="submit" value="save">""" + page_previous_version_link + """
     </form>
+    """ + page_edit_link + """
     <div id="warning"></div>
-    <div id="log"></div>
+    <div id="formatted_output"></div>
   </body>
 </html>""")
 
@@ -216,6 +224,7 @@ class PageHandler(webapp.RequestHandler):
         page = Page.get_or_insert(self.request.get('page_name'))
         page.text_content = self.request.get('page_text_content')
         page.js_content = self.request.get('page_js_content')
+        page.calculated_json_content = self.request.get('page_calculated_json_content')
         
         version = page.version
         if version is None:
@@ -225,7 +234,7 @@ class PageHandler(webapp.RequestHandler):
         page.put()
 
         # Save an older version of the page
-        version_page = Page(key_name=page.name + '_version_' + str(version), name=page.name, text_content=page.text_content, js_content=page.js_content, version=page.version - 1)
+        version_page = Page(key_name=page.name + '_version_' + str(version), name=page.name, text_content=page.text_content, js_content=page.js_content, calculated_json_content=page.calculated_json_content, version=page.version - 1)
         version_page.put()
 
         self.redirect('/?page_name=' + page.name)
