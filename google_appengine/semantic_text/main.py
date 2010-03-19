@@ -34,22 +34,84 @@ class Page(db.Model):
     version = db.IntegerProperty()
     date = db.DateTimeProperty(auto_now_add=True)
 
+class ChooseHandler(webapp.RequestHandler):
+
+    def get(self):
+        self.response.out.write("""
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+       "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en">
+  <head>
+    <title>semantic text</title>
+    <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1" />
+    
+    <style type="text/css">
+    </style>
+  </head>
+
+  <body>
+    <h3>Choose a default template for your new page</h3>
+    <div><a href="/?template=tree">tree</a></div>
+    <div><a href="/?template=hours">hours</a></div>
+    <div>more to come...</div>
+  </body>
+</html>""")
+
 class MainHandler(webapp.RequestHandler):
 
     def get(self):
         page_name = self.request.get('page_name')
-        
-        if page_name is None or page_name == "":
-            self.redirect('/?page_name=' + base64.b16encode(os.urandom(10)))
-            return
+        template = self.request.get('template')
 
-        text_content_default = """26: Jordan
+        if page_name is None or page_name == "":
+            if template is None or template == "":
+                self.redirect('/choose')
+                return
+            else:
+                self.redirect('/?template=' + template + '&page_name=' + base64.b16encode(os.urandom(10)))
+                return
+
+        text_content_default = ""
+        if template == "tree":
+            text_content_default = """26: Jordan
 56: John : The man with the plan
   78 : Stacy : She who is the one
   90 : Brower : Jonny's buddy
 100 : Margie : She's the one"""
+        elif template == "hours":
+            text_content_default = """-550
+worked on something worth mentioning
+and then did something else
+115-
+tue
 
-        js_content_default = """/* <![CDATA[ */
+-550
+worked on something worth mentioning
+and then did something else
+115-
+mon
+
+-445
+this is a test
+and another line
+330-
+wed
+
+-345
+330-
+
+-315
+230-
+tue
+
+-120
+115-
+mon"""
+
+        js_content_default = ""
+        if template == "tree":
+            js_content_default = """/* <![CDATA[ */
 var indent_num_spaces = 2;
       
 function parse_nodes (lines_ref, indent_expected) {
@@ -116,6 +178,138 @@ function outputNode(node) {
     node.children.forEach(outputNode);
 }
 /* ]]> */"""
+        elif template == "hours":
+            js_content_default = """/* <![CDATA[ */
+
+var lines = data.split(/\\n/).filter(
+  function (element) {
+    return ! (element.match(/^#/));
+  }
+);
+
+lines = lines.reverse();
+
+var days_of_week = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+var day_num_for_name = {};
+for ( var x = 0; x < days_of_week.length; x++ ) {
+  day_num_for_name[days_of_week[x]] = x + 1;
+}
+
+var days = [];
+var day = {};
+day.time_chunks = [];
+
+var capture_text_into_time_chunk = false;
+
+for (var i = 0; i < lines.length; i++) {
+  line = lines[i];
+
+  var matched_day = "";
+  if ( matched_day = line.match(RegExp("^(" + days_of_week.join('|') + ")$")) ) {
+    if ( day.time_chunks.length > 0 ) {
+      days.push(day);
+    }
+    day = {};
+    day.time_chunks = [];
+    day.name = matched_day[1];
+  }
+  else if ( matched_time = line.match(/^(-*)([0-9]{1,2})([0-9]{2})(-*)$/) ) {
+
+    var end_indicator = matched_time[1];
+    var matched_hour = matched_time[2];
+    var matched_minute = matched_time[3];
+    var start_indicator = matched_time[4];
+
+    if ( start_indicator == '-' ) {
+      var time_chunk = { "text_lines":[]};
+      time_chunk.start_hour = parseInt(matched_hour);
+      time_chunk.start_minute = parseInt(matched_minute);
+      day.time_chunks.push(time_chunk);
+      capture_text_into_time_chunk = true;
+    }
+    else if ( end_indicator == '-' ) {
+      if ( day.time_chunks.length > 0 ) {
+        day.time_chunks[day.time_chunks.length - 1].end_hour = parseInt(matched_hour);
+        day.time_chunks[day.time_chunks.length - 1].end_minute = parseInt(matched_minute);
+      }
+      capture_text_into_time_chunk = false;
+    }
+  }
+  else {
+    if ( capture_text_into_time_chunk == true ) {
+      day.time_chunks[day.time_chunks.length - 1].text_lines.push(line);
+    }
+  }
+
+  if (i == lines.length - 1) {
+    if ( day.time_chunks.length > 0 ) {
+      days.push(day);
+    }
+  }
+}
+
+data = JSON.stringify(days);
+
+function minutes_to_hours(minutes) {
+  var hours = parseInt(minutes / 60);
+  var minutes = (minutes % 60) + "";
+  if (minutes.length < 2) {
+    minutes = "0" + minutes;
+  }
+  return hours + ":" + minutes;
+}
+
+var week_total = 0;
+var last_day_num = 0;
+var formatted_days = [];
+
+for (var x = 0; x < days.length; x++) {
+  var day = days[x];
+  var formatted_day = "";
+  var is_new_week = false;
+
+  var day_num = day_num_for_name[day.name];
+  if (last_day_num > day_num) {
+    week_total = 0;
+    is_new_week = true;
+  }
+  last_day_num = day_num;
+  var time_chunks = day.time_chunks.reverse();
+
+  var day_total_hours = 0;
+  for (var y = 0; y < time_chunks.length; y++) {
+    var start_minutes = time_chunks[y].start_hour * 60 + time_chunks[y].start_minute;
+    if ( time_chunks[y].end_hour ) {
+      var end_minutes = time_chunks[y].end_hour * 60 + time_chunks[y].end_minute;
+      day_total_hours += end_minutes - start_minutes;
+    }
+  }
+
+  week_total += day_total_hours;
+
+  var bg_color = is_new_week ? "#ccc" : "#ddd";
+
+  formatted_day += '<div style="background-color:' + bg_color + ';margin-top:10px;">' + day.name + ": day hours = " + minutes_to_hours(day_total_hours) + " week hours = " + minutes_to_hours(week_total) +"</div>";
+  
+  for (var y = 0; y < time_chunks.length; y++) {
+    var tc = time_chunks[y];
+    var end_time = "";
+    if ( tc.end_hour) {
+      end_time = " - " + tc.end_hour + ":" + tc.end_minute;
+    }
+    else {
+      end_time = ' - <span style="color:green;">current</span>';
+    }
+    formatted_day += tc.start_hour + ":" + tc.start_minute + end_time;
+    formatted_day += '<div style="margin-left:10px;">' + time_chunks[y].text_lines.reverse().join('<br>').replace(/\\n/, "<br>") + '</div>';
+  }
+
+  formatted_days.push(formatted_day);
+}
+
+append_to_output(formatted_days.reverse().join(""));
+
+/* ]]> */"""
 
         page = Page.get_or_insert(page_name, name=page_name, text_content=text_content_default, js_content=js_content_default, version=0)
         page_text_content = cgi.escape(page.text_content)
@@ -133,6 +327,9 @@ function outputNode(node) {
         if page.version > 0:
             page_previous_version_link = ' <a href="/?page_name=' + page.name + '_version_%s">back one version</a>' % str(page.version - 1)
 
+        if template == "hours" or template == "tree":
+            self.redirect('/?page_name=' + page.name)
+            return
 
         self.response.out.write("""
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
@@ -242,6 +439,7 @@ class PageHandler(webapp.RequestHandler):
 def main():
     application = webapp.WSGIApplication(
                                      [('/', MainHandler),
+                                      ('/choose', ChooseHandler),
                                       ('/update', PageHandler)],
                                      debug=True)
 
